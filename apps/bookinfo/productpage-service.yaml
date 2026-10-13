@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: productpage
+  namespace: bookinfo
+  labels:
+    app: productpage
+    service: productpage
+spec:
+  selector:
+    app: productpage
+  ports:
+    - name: http
+      port: 9080
+      targetPort: 9080

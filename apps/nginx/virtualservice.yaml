@@ -1,0 +1,16 @@
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: nginx
+  namespace: nginx
+spec:
+  hosts:
+    - "nginx.local"
+  gateways:
+    - nginx-gateway
+  http:
+    - route:
+        - destination:
+            host: nginx
+            port:
+              number: 80
