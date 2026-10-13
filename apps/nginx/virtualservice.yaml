@@ -5,11 +5,16 @@ metadata:
   namespace: nginx
 spec:
   hosts:
-    - "nginx.local"
+    - "*"
   gateways:
     - nginx-gateway
   http:
-    - route:
+    - match:
+        - uri:
+            prefix: /nginx
+      rewrite:
+        uri: /
+      route:
         - destination:
             host: nginx
             port:
