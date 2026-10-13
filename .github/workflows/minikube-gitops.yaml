@@ -1,0 +1,52 @@
+name: minikube-istio-argocd
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start minikube
+        uses: medyagh/setup-minikube@latest
+        with:
+          cpus: 2
+          memory: 6000m
+
+      - name: Install Istio
+        run: |
+          curl -L https://istio.io/downloadIstio | ISTIO_VERSION=1.23.2 sh -
+          sudo mv istio-1.23.2/bin/istioctl /usr/local/bin/
+          istioctl install --set profile=demo -y
+          kubectl -n istio-system rollout status deploy/istio-ingressgateway --timeout=300s
+
+      - name: Install Argo CD
+        run: |
+          kubectl create namespace argocd
+          kubectl apply -n argocd --server-side -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+          kubectl -n argocd rollout status deploy/argocd-server --timeout=300s
+          kubectl -n argocd rollout status deploy/argocd-repo-server --timeout=300s
+
+      - name: Register apps (point repoURL at this repo)
+        run: |
+          for f in argocd/*.yaml; do
+            sed "s#https://github.com/YOUR_USER/minikube-istio-argocd-gitops.git#https://github.com/${{ github.repository }}.git#; s#targetRevision: main#targetRevision: ${{ github.ref_name }}#" "$f" | kubectl apply -f -
+          done
+
+      - name: Wait for Argo CD sync
+        run: |
+          for a in bookinfo nginx; do
+            kubectl -n argocd wait --for=jsonpath='{.status.sync.status}'=Synced application/$a --timeout=300s
+            kubectl -n argocd wait --for=jsonpath='{.status.health.status}'=Healthy application/$a --timeout=300s
+          done
+
+      - name: Smoke test through Istio ingress
+        run: |
+          kubectl -n istio-system port-forward svc/istio-ingressgateway 8080:80 &
+          sleep 5
+          curl -sf -H "Host: nginx.local" http://localhost:8080/ | head -n 5
+          curl -sf -H "Host: bookinfo.local" http://localhost:8080/productpage | grep -i "<title>"
